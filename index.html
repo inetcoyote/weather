@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Погода на сегодня и на неделю</title>
+    <title>Погода: Сегодня и на неделю</title>
+    <!-- Подключаем Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -11,19 +13,18 @@
             background-color: #f4f4f4;
         }
         .container {
-            max-width: 900px;
+            max-width: 1000px;
             margin: auto;
             background: white;
             padding: 20px;
             border-radius: 10px;
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
         }
-        h1 {
-            text-align: center;
+        h1, h2 {
             color: #333;
+            text-align: center;
         }
         h2 {
-            color: #444;
             border-bottom: 2px solid #eee;
             padding-bottom: 5px;
         }
@@ -51,6 +52,14 @@
         tr:nth-child(even) {
             background-color: #f9f9f9;
         }
+        .temp-cold {
+            color: #1e90ff;
+            font-weight: bold;
+        }
+        .temp-warm {
+            color: #ff4500;
+            font-weight: bold;
+        }
         .no-data {
             text-align: center;
             color: #888;
@@ -60,114 +69,176 @@
             color: red;
             text-align: center;
         }
+        .controls {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .chart-container {
+            margin-top: 20px;
+            height: 300px;
+        }
     </style>
 </head>
 <body>
 <div class="container">
-    <h1>Погода от койота</h1>
+    <h1>Погода: Сегодня и на неделю</h1>
 
-    <h2>Сегодня</h2>
+    <!-- Выбор даты -->
+    <div class="controls">
+        <label for="date-picker"><strong>Выберите дату:</strong></label>
+        <input type="date" id="date-picker">
+        <button onclick="goToDate()">Показать</button>
+    </div>
+
+    <!-- Погода на сегодня -->
+    <h2>Погода на выбранную дату</h2>
     <div id="today-weather">Загрузка данных...</div>
 
+    <!-- Прогноз на неделю (таблица) -->
     <h2>Прогноз на неделю</h2>
     <div id="weekly-forecast">Загрузка...</div>
+
+    <!-- График температуры -->
+    <h2>График температуры на неделю</h2>
+    <div class="chart-container">
+        <canvas id="tempChart"></canvas>
+    </div>
 </div>
 
 <script>
-        // Получаем текущую дату
-        const today = new Date();
-        const currentYear = today.getFullYear();
-        const currentMonth = today.getMonth() + 1; // JS: 0–11 → 1–12
-        const currentDay = today.getDate();
+        // Глобальные переменные
+        let weatherData = [];
+        let tempChart = null;
 
-        // Функция для парсинга CSV
+        // Форматируем дату в строку "YYYY;M;D"
+        function formatDateKey(year, month, day) {
+            return `${year};${month};${day}`;
+        }
+
+        // Форматируем дату в "YYYY-MM-DD" для input[type="date"]
+        function toInputDate(year, month, day) {
+            return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        }
+
+        // Парсим CSV
         function parseCSV(text) {
             const lines = text.split('\n').filter(line => line.trim());
             const headers = lines[0].split(';').map(h => h.trim());
             const data = [];
 
             for (let i = 1; i < lines.length; i++) {
-                const values = lines[i].split(';').map(v => v.trim().replace(/^"(.*)"$/, '$1')); // Убираем кавычки
+                const values = lines[i].split(';').map(v => v.trim().replace(/^"(.*)"$/, '$1'));
                 const entry = {};
                 headers.forEach((header, index) => {
                     entry[header] = values[index];
                 });
                 data.push(entry);
             }
-
             return data;
         }
 
-        // Форматируем ключ даты "YYYY;M;D" для сравнения
-        function formatDateKey(year, month, day) {
-            return `${year};${month};${day}`;
-        }
+        // Загрузка CSV
+        async function loadCSV() {
+            try {
+                const response = await fetch('weather.csv');
+                if (!response.ok) throw new Error('Файл не найден');
+                const text = await response.text();
+                weatherData = parseCSV(text);
 
-        // Получаем даты на ближайшие 7 дней
-        function getNextWeekDates() {
-            const dates = [];
-            let date = new Date(today);
-            for (let i = 1; i <= 7; i++) {
-                date.setDate(today.getDate() + i);
-                dates.push({
-                    year: date.getFullYear(),
-                    month: date.getMonth() + 1,
-                    day: date.getDate(),
-                    formatted: formatDateKey(date.getFullYear(), date.getMonth() + 1, date.getDate()),
-                    display: `${date.getDate()}.${date.getMonth() + 1}` // День.Месяц
-                });
+                // Устанавливаем сегодняшнюю дату в поле выбора
+                const today = new Date();
+                document.getElementById('date-picker').value = toInputDate(
+                    today.getFullYear(),
+                    today.getMonth() + 1,
+                    today.getDate()
+                );
+
+                // Отображаем данные
+                updateAll();
+            } catch (error) {
+                document.getElementById('today-weather').innerHTML = 
+                    `<p class="error">Ошибка загрузки: ${error.message}</p>`;
             }
-            return dates;
         }
 
-        // Отображение погоды на сегодня
-        function displayTodayWeather(data) {
+        // Обновить все блоки
+        function updateAll() {
+            const dateStr = document.getElementById('date-picker').value;
+            if (!dateStr) return;
+
+            const [year, month, day] = dateStr.split('-').map(Number);
+            displayTodayWeather(year, month, day);
+            displayWeeklyForecast();
+            createTemperatureChart();
+        }
+
+        // Показать погоду на выбранную дату
+        function displayTodayWeather(year, month, day) {
             const container = document.getElementById('today-weather');
-            const todayKey = formatDateKey(currentYear, currentMonth, currentDay);
-            const todayData = data.find(row =>
-                formatDateKey(parseInt(row.year), parseInt(row.month), parseInt(row.day)) === todayKey
+            const key = formatDateKey(year, month, day);
+            const data = weatherData.find(r => 
+                parseInt(r.year) === year &&
+                parseInt(r.month) === month &&
+                parseInt(r.day) === day
             );
 
-            if (todayData) {
+            if (data) {
                 container.innerHTML = `
                     <div class="weather-card">
-                        <p><strong>Дата:</strong> ${currentDay}.${currentMonth}.${currentYear}</p>
-                        <p><strong>Средняя температура:</strong> ${todayData.temperature_avg} °C</p>
-                        <p><strong>Минимум:</strong> ${todayData.temperature_min} °C</p>
-                        <p><strong>Максимум:</strong> ${todayData.temperature_max} °C</p>
-                        <p><strong>Осадки:</strong> ${todayData.precipitation_mm} мм</p>
-                        <p><strong>Погода:</strong> ${todayData.condition}</p>
+                        <p><strong>Дата:</strong> ${day}.${month}.${year}</p>
+                        <p><strong>Средняя температура:</strong> 
+                            <span class="${data.temperature_avg >= 0 ? 'temp-warm' : 'temp-cold'}">
+                                ${data.temperature_avg} °C
+                            </span>
+                        </p>
+                        <p><strong>Минимум:</strong> ${data.temperature_min} °C</p>
+                        <p><strong>Максимум:</strong> ${data.temperature_max} °C</p>
+                        <p><strong>Осадки:</strong> ${data.precipitation_mm} мм</p>
+                        <p><strong>Погода:</strong> ${data.condition}</p>
                     </div>
                 `;
             } else {
-                container.innerHTML = '<p class="no-data">Данных на сегодня нет.</p>';
+                container.innerHTML = '<p class="no-data">Нет данных на выбранную дату.</p>';
             }
         }
 
-        // Отображение прогноза на неделю в виде таблицы
-        function displayWeeklyForecast(data) {
+        // Прогноз на 7 дней вперёд (таблица)
+        function displayWeeklyForecast() {
             const container = document.getElementById('weekly-forecast');
-            const nextWeek = getNextWeekDates();
+            const today = new Date();
+            const nextWeek = [];
 
-            // Фильтруем данные на ближайшую неделю
-            const forecastRows = nextWeek.map(dateObj => {
-                const row = data.find(r =>
-                    parseInt(r.year) === dateObj.year &&
-                    parseInt(r.month) === dateObj.month &&
-                    parseInt(r.day) === dateObj.day
+            for (let i = 1; i <= 7; i++) {
+                const d = new Date(today);
+                d.setDate(today.getDate() + i);
+                nextWeek.push({
+                    year: d.getFullYear(),
+                    month: d.getMonth() + 1,
+                    day: d.getDate(),
+                    display: `${d.getDate()}.${d.getMonth() + 1}`,
+                    key: formatDateKey(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                });
+            }
+            const rows = nextWeek.map(day => {
+                const data = weatherData.find(r =>
+                    parseInt(r.year) === day.year &&
+                    parseInt(r.month) === day.month &&
+                    parseInt(r.day) === day.day
                 );
 
+                const avg = data ? parseFloat(data.temperature_avg) : null;
+                const tempClass = avg !== null ? (avg >= 0 ? 'temp-warm' : 'temp-cold') : '';
+
                 return {
-                    date: dateObj.display,
-                    avgTemp: row ? row.temperature_avg : '—',
-                    minTemp: row ? row.temperature_min : '—',
-                    maxTemp: row ? row.temperature_max : '—',
-                    precipitation: row ? row.precipitation_mm : '—',
-                    condition: row ? row.condition : '—'
+                    date: day.display,
+                    avg: data ? `<span class="${tempClass}">${data.temperature_avg}</span>` : '—',
+                    min: data ? data.temperature_min : '—',
+                    max: data ? data.temperature_max : '—',
+                    precipitation: data ? data.precipitation_mm : '—',
+                    condition: data ? data.condition : '—'
                 };
             });
 
-            // Формируем таблицу
             let tableHTML = `
                 <table>
                     <thead>
@@ -183,15 +254,15 @@
                     <tbody>
             `;
 
-            forecastRows.forEach(day => {
+            rows.forEach(row => {
                 tableHTML += `
                     <tr>
-                        <td><strong>${day.date}</strong></td>
-                        <td>${day.avgTemp}</td>
-                        <!--    <td>${day.minTemp}</td>     -->
-                        <!--    <td>${day.maxTemp}</td>     -->
-                        <td>${day.precipitation}</td>
-                        <td>${day.condition}</td>
+                        <td><strong>${row.date}</strong></td>
+                        <td>${row.avg}</td>
+                        <!--    <td>${row.min}</td>     -->
+                        <!--    <td>${row.max}</td>     -->
+                        <td>${row.precipitation}</td>
+                        <td>${row.condition}</td>
                     </tr>
                 `;
             });
@@ -201,31 +272,113 @@
                 </table>
             `;
 
-            container.innerHTML = forecastRows.some(day => day.avgTemp !== '—')
+            container.innerHTML = rows.some(r => r.avg !== '—')
                 ? tableHTML
                 : '<p class="no-data">Нет данных на ближайшую неделю.</p>';
         }
 
-        // Загрузка и обработка CSV
-        async function loadCSV() {
-            try {
-                const response = await fetch('weather.csv');
-                if (!response.ok) throw new Error('Файл не найден или ошибка сети');
+        // Создание графика температуры на неделю
+        function createTemperatureChart() {
+            const ctx = document.getElementById('tempChart').getContext('2d');
+            const today = new Date();
+            const labels = [];
+            const avgTemps = [];
+            const minTemps = [];
+            const maxTemps = [];
 
-                const text = await response.text();
-                const data = parseCSV(text);
+            for (let i = 1; i <= 7; i++) {
+                const d = new Date(today);
+                d.setDate(today.getDate() + i);
+                const key = formatDateKey(d.getFullYear(), d.getMonth() + 1, d.getDate());
+                labels.push(`${d.getDate()}.${d.getMonth() + 1}`);
 
-                // Отображаем данные
-                displayTodayWeather(data);
-                displayWeeklyForecast(data);
-            } catch (error) {
-                document.getElementById('today-weather').innerHTML =
-                    `<p class="error">Ошибка: ${error.message}</p>`;
-                document.getElementById('weekly-forecast').innerHTML = '';
+                const data = weatherData.find(r =>
+                    parseInt(r.year) === d.getFullYear() &&
+                    parseInt(r.month) === d.getMonth() + 1 &&
+                    parseInt(r.day) === d.getDate()
+                );
+
+                avgTemps.push(data ? parseFloat(data.temperature_avg) : null);
+                minTemps.push(data ? parseFloat(data.temperature_min) : null);
+                maxTemps.push(data ? parseFloat(data.temperature_max) : null);
             }
+
+            // Уничтожаем старый график, если есть
+            if (tempChart) {
+                tempChart.destroy();
+            }
+
+            tempChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Средняя температура (°C)',
+                            data: avgTemps,
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                            tension: 0.3,
+                            fill: false
+                        },
+                        {
+                            label: 'Минимальная температура (°C)',
+                            data: minTemps,
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderDash: [5, 5],
+                            backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                            tension: 0.3,
+                            fill: false
+                        },
+                        {
+                            label: 'Максимальная температура (°C)',
+                            data: maxTemps,
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                            tension: 0.3,
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.dataset.label}: ${context.raw} °C`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            title: {
+                                display: true,
+                                text: 'Температура (°C)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Дата'
+                            }
+                        }
+                    }
+                }
+            });
         }
 
-        // Загружаем при открытии страницы
+        // Переход к выбранной дате
+        function goToDate() {
+            updateAll();
+        }
+
+        // Загружаем данные при загрузке страницы
         window.onload = loadCSV;
     </script>
 </body>

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Погода на сегодня и на неделю</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 900px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        h2 {
+            color: #444;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 5px;
+        }
+        .weather-card {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-top: 10px;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            padding: 10px;
+            text-align: center;
+            border: 1px solid #ddd;
+        }
+        th {
+            background-color: #f0f0f0;
+            color: #333;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .no-data {
+            text-align: center;
+            color: #888;
+            font-style: italic;
+        }
+        .error {
+            color: red;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Погода от койота</h1>
+
+    <h2>Сегодня</h2>
+    <div id="today-weather">Загрузка данных...</div>
+
+    <h2>Прогноз на неделю</h2>
+    <div id="weekly-forecast">Загрузка...</div>
+</div>
+
+<script>
+        // Получаем текущую дату
+        const today = new Date();
+        const currentYear = today.getFullYear();
+        const currentMonth = today.getMonth() + 1; // JS: 0–11 → 1–12
+        const currentDay = today.getDate();
+
+        // Функция для парсинга CSV
+        function parseCSV(text) {
+            const lines = text.split('\n').filter(line => line.trim());
+            const headers = lines[0].split(';').map(h => h.trim());
+            const data = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].split(';').map(v => v.trim().replace(/^"(.*)"$/, '$1')); // Убираем кавычки
+                const entry = {};
+                headers.forEach((header, index) => {
+                    entry[header] = values[index];
+                });
+                data.push(entry);
+            }
+
+            return data;
+        }
+
+        // Форматируем ключ даты "YYYY;M;D" для сравнения
+        function formatDateKey(year, month, day) {
+            return `${year};${month};${day}`;
+        }
+
+        // Получаем даты на ближайшие 7 дней
+        function getNextWeekDates() {
+            const dates = [];
+            let date = new Date(today);
+            for (let i = 1; i <= 7; i++) {
+                date.setDate(today.getDate() + i);
+                dates.push({
+                    year: date.getFullYear(),
+                    month: date.getMonth() + 1,
+                    day: date.getDate(),
+                    formatted: formatDateKey(date.getFullYear(), date.getMonth() + 1, date.getDate()),
+                    display: `${date.getDate()}.${date.getMonth() + 1}` // День.Месяц
+                });
+            }
+            return dates;
+        }
+
+        // Отображение погоды на сегодня
+        function displayTodayWeather(data) {
+            const container = document.getElementById('today-weather');
+            const todayKey = formatDateKey(currentYear, currentMonth, currentDay);
+            const todayData = data.find(row =>
+                formatDateKey(parseInt(row.year), parseInt(row.month), parseInt(row.day)) === todayKey
+            );
+
+            if (todayData) {
+                container.innerHTML = `
+                    <div class="weather-card">
+                        <p><strong>Дата:</strong> ${currentDay}.${currentMonth}.${currentYear}</p>
+                        <p><strong>Средняя температура:</strong> ${todayData.temperature_avg} °C</p>
+                        <p><strong>Минимум:</strong> ${todayData.temperature_min} °C</p>
+                        <p><strong>Максимум:</strong> ${todayData.temperature_max} °C</p>
+                        <p><strong>Осадки:</strong> ${todayData.precipitation_mm} мм</p>
+                        <p><strong>Погода:</strong> ${todayData.condition}</p>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = '<p class="no-data">Данных на сегодня нет.</p>';
+            }
+        }
+
+        // Отображение прогноза на неделю в виде таблицы
+        function displayWeeklyForecast(data) {
+            const container = document.getElementById('weekly-forecast');
+            const nextWeek = getNextWeekDates();
+
+            // Фильтруем данные на ближайшую неделю
+            const forecastRows = nextWeek.map(dateObj => {
+                const row = data.find(r =>
+                    parseInt(r.year) === dateObj.year &&
+                    parseInt(r.month) === dateObj.month &&
+                    parseInt(r.day) === dateObj.day
+                );
+
+                return {
+                    date: dateObj.display,
+                    avgTemp: row ? row.temperature_avg : '—',
+                    minTemp: row ? row.temperature_min : '—',
+                    maxTemp: row ? row.temperature_max : '—',
+                    precipitation: row ? row.precipitation_mm : '—',
+                    condition: row ? row.condition : '—'
+                };
+            });
+
+            // Формируем таблицу
+            let tableHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Дата</th>
+                            <th>Средняя<br>темп. (°C)</th>
+                            <!--    <th>Мин. (°C)</th>      -->
+                            <!--    <th>Макс. (°C)</th>     -->
+                            <th>Осадки (мм)</th>
+                            <th>Погода</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            forecastRows.forEach(day => {
+                tableHTML += `
+                    <tr>
+                        <td><strong>${day.date}</strong></td>
+                        <td>${day.avgTemp}</td>
+                        <!--    <td>${day.minTemp}</td>     -->
+                        <!--    <td>${day.maxTemp}</td>     -->
+                        <td>${day.precipitation}</td>
+                        <td>${day.condition}</td>
+                    </tr>
+                `;
+            });
+
+            tableHTML += `
+                    </tbody>
+                </table>
+            `;
+
+            container.innerHTML = forecastRows.some(day => day.avgTemp !== '—')
+                ? tableHTML
+                : '<p class="no-data">Нет данных на ближайшую неделю.</p>';
+        }
+
+        // Загрузка и обработка CSV
+        async function loadCSV() {
+            try {
+                const response = await fetch('weather.csv');
+                if (!response.ok) throw new Error('Файл не найден или ошибка сети');
+
+                const text = await response.text();
+                const data = parseCSV(text);
+
+                // Отображаем данные
+                displayTodayWeather(data);
+                displayWeeklyForecast(data);
+            } catch (error) {
+                document.getElementById('today-weather').innerHTML =
+                    `<p class="error">Ошибка: ${error.message}</p>`;
+                document.getElementById('weekly-forecast').innerHTML = '';
+            }
+        }
+
+        // Загружаем при открытии страницы
+        window.onload = loadCSV;
+    </script>
+</body>
+</html>
