@@ -1,0 +1,6 @@
+year;month;day;temperature_avg;temperature_min;temperature_max;precipitation_mm;condition
+2024;1;1;-5;-8;-2;2.1;"снег"
+2024;1;2;-3;-6;0;0.0;"ясно"
+2024;2;1;-1;-4;2;1.5;"облачно"
+2025;1;14;3;6;4;3.0;"облачно"
+2025;1;15;-6;-10;-3;3.0;"снег"

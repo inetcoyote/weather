@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Погода на сегодня</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .weather-card {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-top: 10px;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+        }
+        .no-data {
+            text-align: center;
+            color: #888;
+            font-style: italic;
+        }
+        .error {
+            color: red;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Погода на сегодня</h1>
+    <div id="weather-container">Загрузка данных...</div>
+</div>
+
+<script>
+        // Получаем текущую дату
+        const today = new Date();
+        const currentYear = today.getFullYear();
+        const currentMonth = today.getMonth() + 1; // Месяцы в JS — от 0 до 11
+        const currentDay = today.getDate();
+
+        // Функция для парсинга CSV
+        function parseCSV(text) {
+            const lines = text.split('\n').filter(line => line.trim());
+            const headers = lines[0].split(';').map(h => h.trim());
+            const data = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].split(';').map(v => v.trim().replace(/^"(.*)"$/, '$1')); // Убираем кавычки
+                const entry = {};
+                headers.forEach((header, index) => {
+                    entry[header] = values[index];
+                });
+                data.push(entry);
+            }
+
+            return data;
+        }
+
+        // Функция отображения погоды
+        function displayWeather(data) {
+            const container = document.getElementById('weather-container');
+            const todayData = data.find(row => {
+                return (
+                    parseInt(row.year) === currentYear &&
+                    parseInt(row.month) === currentMonth &&
+                    parseInt(row.day) === currentDay
+                );
+            });
+
+            if (todayData) {
+                container.innerHTML = `
+                    <div class="weather-card">
+                        <p><strong>Дата:</strong> ${currentDay}.${currentMonth}.${currentYear}</p>
+                        <p><strong>Средняя температура:</strong> ${todayData.temperature_avg} °C</p>
+                        <p><strong>Минимум:</strong> ${todayData.temperature_min} °C</p>
+                        <p><strong>Максимум:</strong> ${todayData.temperature_max} °C</p>
+                        <p><strong>Осадки:</strong> ${todayData.precipitation_mm} мм</p>
+                        <p><strong>Погода:</strong> ${todayData.condition}</p>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = '<p class="no-data">Данных на сегодня нет.</p>';
+            }
+        }
+
+        // Загрузка и обработка CSV
+        async function loadCSV() {
+            try {
+                const response = await fetch('weather.csv'); // Убедитесь, что файл рядом
+                if (!response.ok) throw new Error('Файл не найден или ошибка сети');
+
+                const text = await response.text();
+                const data = parseCSV(text);
+                displayWeather(data);
+            } catch (error) {
+                document.getElementById('weather-container').innerHTML =
+                    `<p class="error">Ошибка: ${error.message}</p>`;
+            }
+        }
+
+        // Загружаем при открытии страницы
+        window.onload = loadCSV;
+    </script>
+</body>
+</html>
