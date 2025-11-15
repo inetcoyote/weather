@@ -111,7 +111,7 @@ import csv
 with open('weather_forecast.csv', mode='w', encoding='utf-8', newline='') as file:
     writer = csv.writer(file, delimiter=';')
     #writer.writerow(['Год', 'Месяц', 'День', 'МинТ', 'МаксТ', 'СредТ', 'Осадки_мм', 'Погода'])
-    writer.writerow(['year','month','day','temperature_avg','temperature_max','temperature_min','precipitation_mm','condition'])
+    writer.writerow(['year','month','day','temperature_min','temperature_max','temperature_avg','precipitation_mm','condition'])
     writer.writerows(forecast)
 
 print("\n✅ Данные сохранены в 'weather_forecast.csv'")
