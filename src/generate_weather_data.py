@@ -85,10 +85,10 @@ def generate_realistic_weather(city="Москва"):
         desc = WEATHER_DESC[weather_type]
 
         # Генерируем температуру в рамках сезона и города
-        avg_temp = round(random.uniform(base_min, base_max), 1)
-        min_temp = round(avg_temp - random.uniform(0, 5), 1)
-        max_temp = round(avg_temp + random.uniform(0, 5), 1)
-
+        avg_temp = int(round(random.uniform(base_min, base_max), 1))
+        min_temp = int(round(avg_temp - random.uniform(0, 5), 1))
+        max_temp = int(round(avg_temp + random.uniform(0, 5), 1))
+        avg_temp = int(round((min_temp + max_temp) / 2, 1))
         # Осадки
         precipitation = round(random.uniform(desc["precip_min"], desc["precip_max"]), 1) if weather_type in ["снег", "дождь"] else 0.0
 
